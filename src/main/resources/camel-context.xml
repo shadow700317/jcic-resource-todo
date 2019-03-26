@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="        http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd        http://camel.apache.org/schema/spring       http://camel.apache.org/schema/spring/camel-spring.xsd">
+
+    <bean
+        class="org.jasypt.encryption.pbe.config.EnvironmentStringPBEConfig" id="environmentVariablesConfiguration">
+        <property name="algorithm" value="PBEWithMD5AndDES"/>
+        <property name="password" value="5c355400717f0518"/>
+    </bean>
+    <bean class="org.jasypt.encryption.pbe.StandardPBEStringEncryptor" id="configurationEncryptor">
+        <property name="config" ref="environmentVariablesConfiguration"/>
+    </bean>
+	<bean
+        class="org.jasypt.spring31.properties.EncryptablePropertyPlaceholderConfigurer" id="propertyConfigurer">
+        <constructor-arg ref="configurationEncryptor"/>
+        <property name="systemPropertiesModeName" value="SYSTEM_PROPERTIES_MODE_OVERRIDE"/>
+        <property name="ignoreResourceNotFound" value="true"/>
+        <property name="locations">
+            <list>
+                <value>classpath:application.properties</value>
+            </list>
+        </property>
+    </bean>
+	
+    <bean
+        class="org.springframework.jdbc.datasource.DriverManagerDataSource" id="dataDB2">
+        <property name="driverClassName" value="${spring.datasource.driverClassName}"/>
+        <property name="url" value="${spring.datasource.url}"/>
+        <property name="username" value="${spring.datasource.username}"/>
+        <property name="password" value="${spring.datasource.password}"/>
+    </bean>
+ 	
+    <camelContext id="camel" xmlns="http://camel.apache.org/schema/spring">
+    	<!-- <propertyPlaceholder id="properties" location="classpath:application.properties"/> -->
+		<!-- <dataFormats> 
+			<json id="jack" library="Jackson" unmarshalTypeName="org.apache.camel.component.jackson.TestPojo"/> 
+		</dataFormats> -->
+        <restConfiguration bindingMode="auto" enableCORS="true">
+        	<dataFormatProperty key="prettyPrint" value="true"/>
+            <apiProperty key="cors" value="true"/>
+            <apiProperty key="api.title" value="JCIC Todo List API"/>
+            <apiProperty key="api.version" value="1.0.0"/>
+            <corsHeaders key="Access-Control-Allow-Headers" value="Origin,Accept,X-Requested-With,Content-Type,Access-Control-Allow-Origin,Access-Control-Request-Method,Access-Control-Request-Headers" />
+            <corsHeaders key="Access-Control-Allow-Methods" value="GET,HEAD,POST,PUT,DELETE,OPTIONS" />
+            <corsHeaders key="Access-Control-Allow-Origin" value="*" />
+            <corsHeaders key="Access-Control-Max-Age" value="3600" />
+        </restConfiguration>
+        <rest path="/jcic">
+        	<!-- 建立待辦事項 -->
+        	<post uri="/todo">
+        		<description>建立待辦事項</description>
+            	<to uri="direct:addTodo" />
+            </post>
+            <!-- 取得待辦事項 -->
+            <get uri="/todo">
+                <description>取得待辦事項</description>
+                <to uri="direct:getTodo"/>
+            </get>
+            <!-- 變更待辦事項 -->
+            <put uri="/todo">
+                <description>變更待辦事項</description>
+                <to uri="direct:modifyTodo"/>
+            </put>
+			<!-- 刪除待辦事項 -->
+            <delete uri="/todo">
+                <description>刪除待辦事項</description>
+                <to uri="direct:deleteTodo"/>
+            </delete>
+        </rest>
+        
+        <!-- 建立待辦事項 -->
+        <route>
+        	<from uri="direct:getTodo" />
+        	<toD uri="sql:select * from todo_list where is_done=${header.is_done}?dataSource=dataDB2"></toD>
+        </route>
+		<!-- 取得待辦事項 -->
+        <route>
+        	<from uri="direct:addTodo" />
+        	<convertBodyTo type="java.util.Map"/>
+        	<toD uri="sql:select id,item from NEW TABLE (insert into todo_list (item,is_done) values('${body.get('item')}',0))?dataSource=dataDB2"></toD>
+        </route>
+		<!-- 變更待辦事項 -->
+		<route>
+        	<from uri="direct:modifyTodo" />
+        	<convertBodyTo type="java.util.Map"/>
+        	<toD uri="sql:update todo_list set is_done=1 where id=${body.get('id')}?dataSource=dataDB2"></toD>
+        </route>
+        <!-- 刪除待辦事項 -->
+		<route>
+        	<from uri="direct:deleteTodo" />
+        	<convertBodyTo type="java.util.Map"/>
+        	<toD uri="sql:delete from todo_list where id=${body.get('id')}?dataSource=dataDB2"></toD>
+        </route>
+
+    </camelContext>
+</beans>
